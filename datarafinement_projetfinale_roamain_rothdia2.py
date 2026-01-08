@@ -21,6 +21,62 @@ for filename in uploaded.keys():
   # display(df.head())
 
 import pandas as pd
+import numpy as np
+
+# S'assurer que cafe_df contient bien les données initiales du fichier dirty_cafe_sales.csv
+# Si cafe_df a déjà été modifié et que l'on veut les données *d'origine* avant tout nettoyage, il faudrait recharger.
+# Cependant, comme le user mentionne dirty_cafe_sales.csv, nous utiliserons le cafe_df actuel.
+# Si cafe_df_cleaned est le dernier état des données, et cafe_df a été modifié,
+# on rechargerait dirty_cafe_sales.csv ici. Mais pour l'instant, je pars du principe que cafe_df
+# représente l'état le plus proche de l'original après les premières conversions de snake_case.
+
+print("Résumé statistique du DataFrame original 'cafe_df' (avant le nettoyage approfondi) :")
+display(cafe_df.describe(include='all'))
+
+import pandas as pd
+import numpy as np
+
+# Utiliser une copie du DataFrame pour ne pas affecter les transformations ultérieures de cafe_df_cleaned si ce n'est pas déjà fait
+# Assurez-vous que cafe_df est bien le DataFrame initial nettoyé des colonnes 'Item' et avec noms snake_cased.
+item_price_analysis_df = cafe_df[['item', 'price _per _unit']].copy()
+
+# Convertir 'price _per _unit' en numérique, en forçant les erreurs (comme 'ERROR' dans le fichier original) en NaN
+# Nous gardons trace des erreurs pour le calcul du pourcentage d'erreur
+initial_price_per_unit_count = item_price_analysis_df['price _per _unit'].count()
+item_price_analysis_df['price _per _unit'] = pd.to_numeric(item_price_analysis_df['price _per _unit'], errors='coerce')
+non_numeric_price_entries = item_price_analysis_df['price _per _unit'].isna().sum()
+
+# Supprimer les lignes où 'item' est NaN pour l'analyse des prix par item
+item_price_analysis_df_clean_item = item_price_analysis_df.dropna(subset=['item']).copy()
+
+print("\nFréquence des combinaisons 'item' et 'price _per _unit' (après conversion de prix et avant suppression de NaN dans les prix) :")
+display(item_price_analysis_df_clean_item.value_counts().sort_index())
+
+# Calcul du pourcentage d'erreurs d'incohérence de prix (même item avec plusieurs prix)
+item_unique_prices = item_price_analysis_df_clean_item.groupby('item')['price _per _unit'].nunique(dropna=True)
+inconsistent_items_count = item_unique_prices[item_unique_prices > 1].count()
+total_valid_items = item_unique_prices[item_unique_prices >= 1].count()
+
+percentage_inconsistent_pricing = 0
+if total_valid_items > 0:
+    percentage_inconsistent_pricing = (inconsistent_items_count / total_valid_items) * 100
+
+print(f"\nPourcentage d'erreurs d'incohérence de prix (articles avec >1 prix unitaire) : {percentage_inconsistent_pricing:.2f}%")
+
+if inconsistent_items_count > 0:
+    print("Items avec des prix unitaires incohérents (non-NaN) :")
+    for item_name in item_unique_prices[item_unique_prices > 1].index:
+        prices = item_price_analysis_df_clean_item[item_price_analysis_df_clean_item['item'] == item_name]['price _per _unit'].dropna().unique()
+        print(f"- {item_name}: {sorted(prices)}")
+
+# Calcul du pourcentage d'erreurs dues aux prix non numériques (ex: 'ERROR')
+percentage_non_numeric_price_entries = 0
+if initial_price_per_unit_count > 0:
+    percentage_non_numeric_price_entries = (non_numeric_price_entries / initial_price_per_unit_count) * 100
+
+print(f"\nPourcentage d'entrées 'price _per _unit' non numériques (convertis en NaN) : {percentage_non_numeric_price_entries:.2f}%")
+
+import pandas as pd
 
 # Charge le fichier dirty_cafe_sales.csv dans un nouveau DataFrame
 cafe_df = pd.read_csv('dirty_cafe_sales.csv')
@@ -74,8 +130,6 @@ for item in unique_items_cleaned:
 # Afficher les 5 premières lignes du DataFrame pour voir l'impact du nettoyage
 print("\nPremières lignes du DataFrame après nettoyage de 'Item' :")
 display(cafe_df.head())
-
-
 
 import re
 
@@ -421,8 +475,6 @@ plt.xticks(rotation=45)
 plt.tight_layout()
 plt.show()
 
-#donne une courbe cumultative du chiffre d'affaire jour apres jour
-
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -486,8 +538,6 @@ axes[1].tick_params(axis='x', rotation=45)
 
 plt.tight_layout()
 plt.show()
-
-#donne un graphique du chiffre d'affaire par mois puis par trimestre
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -587,8 +637,6 @@ plt.xticks(rotation=45, ha='right')
 plt.tight_layout()
 plt.show()
 
-
-
 # Enregistre le DataFrame nettoyé dans un fichier CSV
 output_filename = 'cafe_sales_cleaned.csv'
 cafe_df_cleaned.to_csv(output_filename, index=False)
@@ -598,3 +646,53 @@ print(f"Le fichier '{output_filename}' a été créé dans votre environnement C
 # Propose le téléchargement du fichier
 from google.colab import files
 files.download(output_filename)
+
+#valeur moyenne des total _spent
+average_total_spent = cafe_df_cleaned['total _spent'].mean()
+print(f"La valeur moyenne de 'total _spent' est : {average_total_spent:.2f}")
+
+#cout moyen pas location en format camembert
+
+average_total_spent_by_location = cafe_df_cleaned.groupby('location')['total _spent'].mean().reset_index()
+print("Moyenne de 'total _spent' par location :")
+display(average_total_spent_by_location)
+
+print("Résumé statistique des colonnes numériques du DataFrame 'cafe_df_cleaned' :")
+display(cafe_df_cleaned.describe(include=['float', 'int']))
+
+# To see outliers in numerical columns, import Python libraries for visualization.
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+numeric_cols = cafe_df_cleaned.select_dtypes(include=['float', 'int']).columns
+
+plt.figure(figsize=(15, 4))
+sns.boxplot(data=cafe_df_cleaned[numeric_cols], orient='h')
+plt.title('Boxplots for Numeric Columns')
+plt.show()
+
+# Inspect values in categorical columns
+cat_cols = ['item', 'payment _method', 'location']
+for col in cat_cols:
+    print(f"{cafe_df_cleaned[col].value_counts()}\n")
+
+# Calculer le nombre de valeurs manquantes par colonne
+missing_counts = cafe_df_cleaned.isnull().sum()
+
+# Calculer le pourcentage de valeurs manquantes par colonne
+missing_percentages = (cafe_df_cleaned.isnull().sum() / len(cafe_df_cleaned)) * 100
+
+# Créer un DataFrame pour afficher ces informations
+missing_info = pd.DataFrame({
+    'Nombre de valeurs manquantes': missing_counts,
+    'Pourcentage de valeurs manquantes': missing_percentages
+})
+
+# Filtrer pour n'afficher que les colonnes ayant des valeurs manquantes et trier
+missing_info = missing_info[missing_info['Nombre de valeurs manquantes'] > 0].sort_values(by='Pourcentage de valeurs manquantes', ascending=False)
+
+if not missing_info.empty:
+    print("Valeurs manquantes dans cafe_df_cleaned :")
+    display(missing_info)
+else:
+    print("Aucune valeur manquante trouvée dans cafe_df_cleaned.")
